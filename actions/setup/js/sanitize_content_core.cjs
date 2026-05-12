@@ -176,12 +176,12 @@ function sanitizeDomainName(domain) {
  * @returns {string} The string with non-https protocols redacted
  */
 function sanitizeUrlProtocols(s) {
-  // Normalize percent-encoded colons before applying the protocol blocklist.
+  // Normalize percent-encoded colons before applying the protocol filter.
   // This prevents bypasses via javascript%3Aalert(1) (single-encoded),
   // javascript%253Aalert(1) (double-encoded), or deeper nesting.
   // Strategy: iteratively decode %25 -> % (up to 4 passes, which handles
   // encodings up to 5 levels deep) until stable, then decode %3A -> :
-  // so the blocklist regex always sees literal colons.
+  // so the filter regex always sees literal colons.
   let normalized = s;
   // Iteratively decode %25XX (percent-encoded percent signs) one level at a
   // time. 4 passes handles up to 5 encoding levels, which is far beyond the
@@ -197,35 +197,52 @@ function sanitizeUrlProtocols(s) {
   }
   normalized = normalized.replace(/%3[Aa]/gi, ":"); // decode %3A -> :
 
-  // Match common non-https protocols
-  // This regex matches: protocol://domain or protocol:path or incomplete protocol://
-  // Examples: http://, ftp://, file://, data:, javascript:, mailto:, tel:, ssh://, git://
-  // The regex also matches incomplete protocols like "http://" or "ftp://" without a domain
-  // Note: No word boundary check to catch protocols even when preceded by word characters
-  return normalized.replace(/((?:http|ftp|file|ssh|git):\/\/([\w.-]*)(?:[^\s]*)|(?:data|javascript|vbscript|about|mailto|tel):[^\s]+)/gi, (match, _fullMatch, domain) => {
-    // Extract domain for http/ftp/file/ssh/git protocols
-    if (domain) {
-      const domainLower = domain.toLowerCase();
-      const sanitized = sanitizeDomainName(domainLower);
-      const truncated = domainLower.length > 12 ? domainLower.substring(0, 12) + "..." : domainLower;
+  // ── Step 1: allowlist-based protocol:// filtering ──────────────────────────
+  // Redact every scheme://  URL that is NOT https://.  This covers http://,
+  // ftp://, ssh://, git://, ws://, wss://, smb://, irc://, ldap://, ldaps://,
+  // rtsp://, feed://, and any future schemes — eliminating the class of
+  // blocklist-incompleteness bypasses.
+  //
+  // Regex anchors that protect existing https:// URLs:
+  //   (?<![a-z0-9]) — negative lookbehind: ensures we do not match a suffix of
+  //                   another protocol name (e.g. "ttps://" inside "https://…").
+  //   (?!https://)  — negative lookahead: explicitly excludes https://, which is
+  //                   passed through to sanitizeUrlDomains for domain filtering.
+  let result = normalized.replace(/(?<![a-z0-9])(?!https:\/\/)([a-z][a-z0-9+.-]*)(:\/\/)([\w.-]*)([^\s]*)/gi, (_match, scheme, _slashes, domain, _rest) => {
+    const fullMatch = _match;
+    if (!domain) {
+      // No host present (e.g. "file:///path" or bare "http://"). Use the scheme
+      // (e.g. "file://") as the redacted-domain token so the redaction summary
+      // remains useful without recording an empty-string entry.
+      const truncated = fullMatch.length > 12 ? fullMatch.substring(0, 12) + "..." : fullMatch;
       core.info(`Redacted URL: ${truncated}`);
-      core.debug(`Redacted URL (full): ${match}`);
-      addRedactedDomain(domainLower);
-      // Return sanitized domain format
-      return sanitized ? `(${sanitized}/redacted)` : "(redacted)";
-    } else {
-      // For other protocols (data:, javascript:, etc.), track the protocol itself
-      const protocolMatch = match.match(/^([^:]+):/);
-      if (protocolMatch) {
-        const protocol = protocolMatch[1] + ":";
-        // Truncate the matched URL for logging (keep first 12 chars + "...")
-        const truncated = match.length > 12 ? match.substring(0, 12) + "..." : match;
-        core.info(`Redacted URL: ${truncated}`);
-        core.debug(`Redacted URL (full): ${match}`);
-        addRedactedDomain(protocol);
-      }
+      core.debug(`Redacted URL (full): ${fullMatch}`);
+      addRedactedDomain(scheme.toLowerCase() + "://");
       return "(redacted)";
     }
+    const domainLower = domain.toLowerCase();
+    const sanitized = sanitizeDomainName(domainLower);
+    const truncated = domainLower.length > 12 ? domainLower.substring(0, 12) + "..." : domainLower;
+    core.info(`Redacted URL: ${truncated}`);
+    core.debug(`Redacted URL (full): ${fullMatch}`);
+    addRedactedDomain(domainLower);
+    return sanitized ? `(${sanitized}/redacted)` : "(redacted)";
+  });
+
+  // ── Step 2: blocklist-based single-colon scheme filtering ───────────────────
+  // For schemes that do not use "//", a targeted blocklist is used because a
+  // fully general single-colon pattern produces too many false positives
+  // (e.g. "key:value" in YAML, "std::vector" in C++, "C:\path" on Windows).
+  return result.replace(/(?:data|javascript|vbscript|about|mailto|tel|magnet):[^\s]+/gi, match => {
+    const protocolMatch = match.match(/^([^:]+):/);
+    if (protocolMatch) {
+      const protocol = protocolMatch[1] + ":";
+      const truncated = match.length > 12 ? match.substring(0, 12) + "..." : match;
+      core.info(`Redacted URL: ${truncated}`);
+      core.debug(`Redacted URL (full): ${match}`);
+      addRedactedDomain(protocol);
+    }
+    return "(redacted)";
   });
 }
 
