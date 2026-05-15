@@ -338,7 +338,7 @@ export default defineConfig({
 					label: 'Practices',
 					items: [
 						{ label: 'A/B Experiments', link: '/guides/experiments/' },
-					{ label: 'A/B Experiments (Spec)', link: '/reference/experiments-specification/' },
+						{ label: 'A/B Experiments (Spec)', link: '/reference/experiments-specification/' },
 						{ label: 'Maintaining Repositories', link: '/practices/maintaining-repos/' },
 						{ label: 'Organization Practices', link: '/practices/organization-practices/' },
 						{ label: 'Safe Rollout', link: '/practices/safe-rollout/' },
