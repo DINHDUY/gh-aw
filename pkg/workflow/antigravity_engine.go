@@ -21,7 +21,7 @@ func NewAntigravityEngine() *AntigravityEngine {
 			id:           "antigravity",
 			displayName:  "Antigravity CLI",
 			description:  "Antigravity CLI with headless mode and LLM gateway support",
-			experimental: false,
+			experimental: true,
 			capabilities: EngineCapabilities{
 				ToolsAllowlist:   true,
 				MaxTurns:         false,
@@ -88,14 +88,12 @@ func (e *AntigravityEngine) GetInstallationSteps(workflowData *WorkflowData) []G
 		return []GitHubActionStep{}
 	}
 
-	npmSteps := BuildStandardNpmEngineInstallStepsNoCooldown(
-		"@google/antigravity-cli",
-		string(constants.DefaultAntigravityVersion),
-		"Install Antigravity CLI",
-		"antigravity",
-		workflowData,
-	)
-	return BuildNpmEngineInstallStepsWithAWF(npmSteps, workflowData)
+	version := string(constants.DefaultAntigravityVersion)
+	if workflowData.EngineConfig != nil && workflowData.EngineConfig.Version != "" {
+		version = workflowData.EngineConfig.Version
+	}
+	installSteps := GenerateAntigravityInstallerSteps(version, "Install Antigravity CLI")
+	return BuildNpmEngineInstallStepsWithAWF(installSteps, workflowData)
 }
 
 // GetDeclaredOutputFiles returns the output files that Antigravity may produce.
