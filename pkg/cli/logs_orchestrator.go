@@ -556,7 +556,7 @@ func DownloadWorkflowLogs(ctx context.Context, opts LogsDownloadOptions) error {
 		// This prevents stderr messages from corrupting JSON when both streams are redirected together
 		if jsonOutput {
 			logsData := buildLogsData([]ProcessedRun{}, outputDir, nil)
-			if err := renderLogsJSON(logsData); err != nil {
+			if err := renderLogsJSON(logsData, verbose); err != nil {
 				return fmt.Errorf("failed to render JSON output: %w", err)
 			}
 		}
@@ -652,6 +652,16 @@ func renderLogsOutput(processedRuns []ProcessedRun, opts renderLogsOutputOptions
 	}
 
 	// Render output based on format preference.
+	// When --format tsv is specified, output tab-separated values for maximum token efficiency.
+	if opts.format == "tsv" {
+		if opts.verbose {
+			renderLogsTSVVerbose(logsData)
+		} else {
+			renderLogsTSV(logsData)
+		}
+		return nil
+	}
+
 	// When --format markdown or --format pretty is specified, generate a cross-run audit report
 	// instead of the default metrics table.
 	if opts.format == "markdown" || opts.format == "pretty" {
@@ -686,7 +696,7 @@ func renderLogsOutput(processedRuns []ProcessedRun, opts renderLogsOutputOptions
 	}
 
 	if opts.jsonOutput {
-		if err := renderLogsJSON(logsData); err != nil {
+		if err := renderLogsJSON(logsData, opts.verbose); err != nil {
 			return fmt.Errorf("failed to render JSON output: %w", err)
 		}
 	} else {
@@ -848,7 +858,7 @@ func DownloadWorkflowLogsFromStdin(ctx context.Context, opts StdinLogsOptions) e
 	if len(runs) == 0 {
 		if opts.JSONOutput {
 			logsData := buildLogsData([]ProcessedRun{}, opts.OutputDir, nil)
-			if err := renderLogsJSON(logsData); err != nil {
+			if err := renderLogsJSON(logsData, opts.Verbose); err != nil {
 				return fmt.Errorf("failed to render JSON output: %w", err)
 			}
 		}
@@ -1029,7 +1039,7 @@ func DownloadWorkflowLogsFromStdin(ctx context.Context, opts StdinLogsOptions) e
 	if len(processedRuns) == 0 {
 		if opts.JSONOutput {
 			logsData := buildLogsData([]ProcessedRun{}, opts.OutputDir, nil)
-			if err := renderLogsJSON(logsData); err != nil {
+			if err := renderLogsJSON(logsData, opts.Verbose); err != nil {
 				return fmt.Errorf("failed to render JSON output: %w", err)
 			}
 		}

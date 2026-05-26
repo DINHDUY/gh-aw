@@ -61,62 +61,34 @@ func renderMarkdownMetricsTrend(mt MetricsTrendData) {
 
 	fmt.Fprintln(os.Stdout, "## Metrics Trends")
 	fmt.Fprintln(os.Stdout)
-	renderMarkdownCostTrend(mt)
-	renderMarkdownTokenTrend(mt)
-	renderMarkdownTurnTrend(mt)
-	renderMarkdownDurationTrend(mt)
-}
-
-func renderMarkdownCostTrend(mt MetricsTrendData) {
-	if mt.RunsWithCost == 0 {
-		return
+	fmt.Fprintf(os.Stdout, "| Metric | Total | Avg/run | Min | Max | Spikes |\n")
+	fmt.Fprintf(os.Stdout, "|--------|-------|---------|-----|-----|--------|\n")
+	if mt.RunsWithCost > 0 {
+		spikes := "—"
+		if len(mt.CostSpikes) > 0 {
+			spikes = "⚠ " + formatRunIDs(mt.CostSpikes)
+		}
+		fmt.Fprintf(os.Stdout, "| Cost | $%.4f | $%.4f | $%.4f | $%.4f | %s |\n",
+			mt.TotalCost, mt.AvgCost, mt.MinCost, mt.MaxCost, spikes)
 	}
-	fmt.Fprintf(os.Stdout, "**Cost Trend** (%d runs with cost data)\n\n", mt.RunsWithCost)
-	fmt.Fprintf(os.Stdout, "| Total | Avg/run | Min | Max |\n")
-	fmt.Fprintf(os.Stdout, "|-------|---------|-----|-----|\n")
-	fmt.Fprintf(os.Stdout, "| $%.4f | $%.4f | $%.4f | $%.4f |\n", mt.TotalCost, mt.AvgCost, mt.MinCost, mt.MaxCost)
-	if len(mt.CostSpikes) > 0 {
-		fmt.Fprintf(os.Stdout, "\n⚠ Cost spikes (>2x avg) in runs: %s\n", formatRunIDs(mt.CostSpikes))
+	if mt.TotalTokens > 0 {
+		spikes := "—"
+		if len(mt.TokenSpikes) > 0 {
+			spikes = "⚠ " + formatRunIDs(mt.TokenSpikes)
+		}
+		fmt.Fprintf(os.Stdout, "| Tokens | %d | %d | %d | %d | %s |\n",
+			mt.TotalTokens, mt.AvgTokens, mt.MinTokens, mt.MaxTokens, spikes)
 	}
-	fmt.Fprintln(os.Stdout)
-}
-
-func renderMarkdownTokenTrend(mt MetricsTrendData) {
-	if mt.TotalTokens == 0 {
-		return
+	if mt.TotalTurns > 0 {
+		fmt.Fprintf(os.Stdout, "| Turns | %d | %.1f | — | %d | — |\n",
+			mt.TotalTurns, mt.AvgTurns, mt.MaxTurns)
 	}
-	fmt.Fprintf(os.Stdout, "**Token Trend**\n\n")
-	fmt.Fprintf(os.Stdout, "| Total | Avg/run | Min | Max |\n")
-	fmt.Fprintf(os.Stdout, "|-------|---------|-----|-----|\n")
-	fmt.Fprintf(os.Stdout, "| %d | %d | %d | %d |\n", mt.TotalTokens, mt.AvgTokens, mt.MinTokens, mt.MaxTokens)
-	if len(mt.TokenSpikes) > 0 {
-		fmt.Fprintf(os.Stdout, "\n⚠ Token spikes (>2x avg) in runs: %s\n", formatRunIDs(mt.TokenSpikes))
+	if mt.AvgDurationNs > 0 {
+		fmt.Fprintf(os.Stdout, "| Duration | — | %s | %s | %s | — |\n",
+			timeutil.FormatDurationNs(mt.AvgDurationNs),
+			timeutil.FormatDurationNs(mt.MinDurationNs),
+			timeutil.FormatDurationNs(mt.MaxDurationNs))
 	}
-	fmt.Fprintln(os.Stdout)
-}
-
-func renderMarkdownTurnTrend(mt MetricsTrendData) {
-	if mt.TotalTurns == 0 {
-		return
-	}
-	fmt.Fprintf(os.Stdout, "**Turn Trend**\n\n")
-	fmt.Fprintf(os.Stdout, "| Total | Avg/run | Max |\n")
-	fmt.Fprintf(os.Stdout, "|-------|---------|-----|\n")
-	fmt.Fprintf(os.Stdout, "| %d | %.1f | %d |\n", mt.TotalTurns, mt.AvgTurns, mt.MaxTurns)
-	fmt.Fprintln(os.Stdout)
-}
-
-func renderMarkdownDurationTrend(mt MetricsTrendData) {
-	if mt.AvgDurationNs == 0 {
-		return
-	}
-	fmt.Fprintf(os.Stdout, "**Duration Trend**\n\n")
-	fmt.Fprintf(os.Stdout, "| Avg | Min | Max |\n")
-	fmt.Fprintf(os.Stdout, "|-----|-----|-----|\n")
-	fmt.Fprintf(os.Stdout, "| %s | %s | %s |\n",
-		timeutil.FormatDurationNs(mt.AvgDurationNs),
-		timeutil.FormatDurationNs(mt.MinDurationNs),
-		timeutil.FormatDurationNs(mt.MaxDurationNs))
 	fmt.Fprintln(os.Stdout)
 }
 
@@ -183,14 +155,17 @@ func renderMarkdownDrain3Insights(insights []ObservabilityInsight) {
 	crossRunRenderLog.Printf("Rendering markdown drain3 insights: count=%d", len(insights))
 	fmt.Fprintln(os.Stdout, "## Agent Event Pattern Analysis")
 	fmt.Fprintln(os.Stdout)
+	fmt.Fprintf(os.Stdout, "| Severity | Category | Title | Summary |\n")
+	fmt.Fprintf(os.Stdout, "|----------|----------|-------|--------|\n")
 	for _, insight := range insights {
-		fmt.Fprintf(os.Stdout, "### %s %s\n\n", renderSeverityIcon(insight.Severity), insight.Title)
-		fmt.Fprintf(os.Stdout, "**Category:** %s | **Severity:** %s\n\n", insight.Category, insight.Severity)
-		fmt.Fprintf(os.Stdout, "%s\n\n", insight.Summary)
+		summary := insight.Summary
 		if insight.Evidence != "" {
-			fmt.Fprintf(os.Stdout, "_Evidence:_ `%s`\n\n", insight.Evidence)
+			summary += " (" + insight.Evidence + ")"
 		}
+		fmt.Fprintf(os.Stdout, "| %s %s | %s | %s | %s |\n",
+			renderSeverityIcon(insight.Severity), insight.Severity, insight.Category, insight.Title, summary)
 	}
+	fmt.Fprintln(os.Stdout)
 }
 
 func renderMarkdownPerRunBreakdown(runs []PerRunFirewallBreakdown) {
