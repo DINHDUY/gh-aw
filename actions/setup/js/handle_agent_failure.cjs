@@ -172,6 +172,7 @@ function buildFailureMatchCategories(options) {
   if (options.hasAppTokenMintingFailed) categories.push("app_token_minting_failed");
   if (options.hasLockdownCheckFailed) categories.push("lockdown_check_failed");
   if (options.hasStaleLockFileFailed) categories.push("stale_lock_file_failed");
+  if (options.hasDailyEffectiveWorkflowExceeded) categories.push("daily_effective_workflow_exceeded");
 
   if (options.agentConclusion === "failure" && !options.isTimedOut) {
     categories.push("agent_failure");
@@ -1378,6 +1379,29 @@ function buildStaleLockFileFailedContext(hasStaleLockFileFailed) {
   return "\n" + template;
 }
 
+/**
+ * Build a context string when the 24-hour per-workflow ET guardrail prevented the agent from
+ * starting in the activation job.
+ * @param {boolean} hasDailyEffectiveWorkflowExceeded - Whether the daily workflow quota was exceeded
+ * @param {string} totalEffectiveTokens - Aggregated ET usage across the last 24 hours
+ * @param {string} threshold - Configured daily workflow threshold
+ * @returns {string} Formatted context string, or empty string if no failure
+ */
+function buildDailyEffectiveWorkflowExceededContext(hasDailyEffectiveWorkflowExceeded, totalEffectiveTokens, threshold) {
+  if (!hasDailyEffectiveWorkflowExceeded) {
+    return "";
+  }
+
+  const templatePath = getPromptPath("daily_effective_workflow_exceeded.md");
+  return (
+    "\n" +
+    renderTemplateFromFile(templatePath, {
+      total_effective_tokens: totalEffectiveTokens || "unknown",
+      threshold: threshold || "unknown",
+    })
+  );
+}
+
 // Maps engine ID (GH_AW_ENGINE_ID) to credential name for use with GH_AW_ENGINE_API_HOSTS.
 const ENGINE_ID_TO_CREDENTIAL = /** @type {Record<string, string>} */ {
   copilot: "`COPILOT_GITHUB_TOKEN`",
@@ -2044,6 +2068,9 @@ async function main() {
     // stored in the compiled .lock.yml no longer matches the source .md file.
     // The agent is skipped in this case; the conclusion job runs to surface remediation guidance.
     const hasStaleLockFileFailed = process.env.GH_AW_STALE_LOCK_FILE_FAILED === "true";
+    const hasDailyEffectiveWorkflowExceeded = process.env.GH_AW_DAILY_EFFECTIVE_WORKFLOW_EXCEEDED === "true";
+    const dailyEffectiveWorkflowTotalEffectiveTokens = process.env.GH_AW_DAILY_EFFECTIVE_WORKFLOW_TOTAL_EFFECTIVE_TOKENS || "";
+    const dailyEffectiveWorkflowThreshold = process.env.GH_AW_DAILY_EFFECTIVE_WORKFLOW_THRESHOLD || "";
     // Cache-memory availability flag — set when cache-memory is configured for the workflow.
     // Used to detect cache-miss misconfigurations reported by the agent.
     const cacheMemoryEnabled = process.env.GH_AW_CACHE_MEMORY_ENABLED === "true";
@@ -2081,6 +2108,7 @@ async function main() {
     core.info(`Effective tokens: ${effectiveTokens || "(none)"}`);
     core.info(`Configured max effective tokens: ${maxEffectiveTokens || "(none)"}`);
     core.info(`Effective tokens rate-limit error: ${effectiveTokensRateLimitError}`);
+    core.info(`Daily workflow ET guardrail exceeded: ${hasDailyEffectiveWorkflowExceeded}`);
     core.info(`Inference access error: ${inferenceAccessError}`);
     core.info(`MCP policy error: ${mcpPolicyError}`);
     core.info(`Agentic engine timeout: ${agenticEngineTimeout}`);
@@ -2237,6 +2265,7 @@ async function main() {
       !hasAppTokenMintingFailed &&
       !hasLockdownCheckFailed &&
       !hasStaleLockFileFailed &&
+      !hasDailyEffectiveWorkflowExceeded &&
       !hasReportIncomplete &&
       !hasCacheMissMisconfiguration &&
       !effectiveTokensRateLimitError &&
@@ -2244,7 +2273,7 @@ async function main() {
       !hasMissingData
     ) {
       core.info(
-        `Agent job did not fail and no assignment/discussion/code-push/push-repo-memory/app-token/lockdown/stale-lock-file/report-incomplete/cache-miss/missing-tool/missing-data errors and has safe outputs (conclusion: ${agentConclusion}), skipping failure handling`
+        `Agent job did not fail and no assignment/discussion/code-push/push-repo-memory/app-token/lockdown/stale-lock-file/daily-workflow-et/report-incomplete/cache-miss/missing-tool/missing-data errors and has safe outputs (conclusion: ${agentConclusion}), skipping failure handling`
       );
       return;
     }
@@ -2349,6 +2378,7 @@ async function main() {
       hasAppTokenMintingFailed,
       hasLockdownCheckFailed,
       hasStaleLockFileFailed,
+      hasDailyEffectiveWorkflowExceeded,
     });
 
     core.info(`Checking for existing issue with precise failure metadata for title: "${issueTitle}"`);
@@ -2468,6 +2498,11 @@ async function main() {
 
         // Build stale lock file failure context
         const staleLockFileFailedContext = buildStaleLockFileFailedContext(hasStaleLockFileFailed);
+        const dailyEffectiveWorkflowExceededContext = buildDailyEffectiveWorkflowExceededContext(
+          hasDailyEffectiveWorkflowExceeded,
+          dailyEffectiveWorkflowTotalEffectiveTokens,
+          dailyEffectiveWorkflowThreshold
+        );
 
         // Build copilot assignment failure context for created issues
         const assignCopilotFailureContext = buildAssignCopilotFailureContext(hasAssignCopilotFailures, assignCopilotErrors);
@@ -2509,6 +2544,7 @@ async function main() {
           app_token_minting_failed_context: appTokenMintingFailedContext,
           lockdown_check_failed_context: lockdownCheckFailedContext,
           stale_lock_file_failed_context: staleLockFileFailedContext,
+          daily_effective_workflow_exceeded_context: dailyEffectiveWorkflowExceededContext,
         };
 
         // Render the comment template
@@ -2654,6 +2690,11 @@ async function main() {
 
         // Build stale lock file failure context
         const staleLockFileFailedContext = buildStaleLockFileFailedContext(hasStaleLockFileFailed);
+        const dailyEffectiveWorkflowExceededContext = buildDailyEffectiveWorkflowExceededContext(
+          hasDailyEffectiveWorkflowExceeded,
+          dailyEffectiveWorkflowTotalEffectiveTokens,
+          dailyEffectiveWorkflowThreshold
+        );
 
         // Build copilot assignment failure context for created issues
         const assignCopilotFailureContext = buildAssignCopilotFailureContext(hasAssignCopilotFailures, assignCopilotErrors);
@@ -2696,6 +2737,7 @@ async function main() {
           app_token_minting_failed_context: appTokenMintingFailedContext,
           lockdown_check_failed_context: lockdownCheckFailedContext,
           stale_lock_file_failed_context: staleLockFileFailedContext,
+          daily_effective_workflow_exceeded_context: dailyEffectiveWorkflowExceededContext,
         };
 
         // Render the issue template
@@ -2771,6 +2813,7 @@ module.exports = {
   buildAppTokenMintingFailedContext,
   buildLockdownCheckFailedContext,
   buildStaleLockFileFailedContext,
+  buildDailyEffectiveWorkflowExceededContext,
   buildTimeoutContext,
   buildAssignCopilotFailureContext,
   buildEngineFailureContext,
