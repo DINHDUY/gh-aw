@@ -123,7 +123,11 @@ jobs:
       - name: "[powershell] --help with timeout"
         shell: powershell
         run: |
-          $proc = Start-Process -FilePath $env:BINARY -ArgumentList "--help" -PassThru -NoNewWindow
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = $env:BINARY
+          $psi.Arguments = "--help"
+          $psi.UseShellExecute = $false
+          $proc = [System.Diagnostics.Process]::Start($psi)
           if (-Not $proc.WaitForExit(30000)) {
             $proc.Kill()
             throw "TIMEOUT: --help hung for 30s in Windows PowerShell"
@@ -134,7 +138,11 @@ jobs:
       - name: "[powershell] version with timeout"
         shell: powershell
         run: |
-          $proc = Start-Process -FilePath $env:BINARY -ArgumentList "version" -PassThru -NoNewWindow
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = $env:BINARY
+          $psi.Arguments = "version"
+          $psi.UseShellExecute = $false
+          $proc = [System.Diagnostics.Process]::Start($psi)
           if (-Not $proc.WaitForExit(30000)) {
             $proc.Kill()
             throw "TIMEOUT: version hung for 30s in Windows PowerShell"
