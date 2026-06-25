@@ -382,7 +382,6 @@ func (e *CopilotEngine) GetExecutionSteps(workflowData *WorkflowData, logFile st
 		// Non-sandbox mode: pass prompt file path directly
 		copilotCommand = fmt.Sprintf(`%s %s --prompt-file /tmp/gh-aw/aw-prompts/prompt.txt`, execPrefix, shellJoinArgs(copilotArgs))
 	}
-
 	// Conditionally wrap with sandbox (AWF only)
 	var command string
 	if isFirewallEnabled(workflowData) {
@@ -677,6 +676,9 @@ touch %s
 	} else {
 		env[constants.CopilotCLIModelEnvVar] = compilerenv.BuildModelOverrideExpression(modelEnvVar, compilerenv.DefaultModelCopilot, constants.CopilotBYOKDefaultModel)
 	}
+
+	// Inject GH_AW_ENGINE_CWD when engine.cwd is configured.
+	applyEngineCwdEnv(env, workflowData)
 
 	// Add custom environment variables from engine config
 	if workflowData.EngineConfig != nil && len(workflowData.EngineConfig.Env) > 0 {

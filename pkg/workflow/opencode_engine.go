@@ -126,6 +126,7 @@ func (e *OpenCodeEngine) GetExecutionSteps(workflowData *WorkflowData, logFile s
 		commandName = workflowData.EngineConfig.Command
 	}
 	openCodeCommand := fmt.Sprintf("%s run %s %s", commandName, shellJoinArgs(openCodeArgs), promptArg)
+	openCodeCommand = getWorkspaceCommandPrefixFor(workflowData.EngineConfig) + openCodeCommand
 
 	firewallEnabled := isFirewallEnabled(workflowData)
 	var command string
@@ -201,6 +202,7 @@ func (e *OpenCodeEngine) GetExecutionSteps(workflowData *WorkflowData, logFile s
 		env[constants.OpenCodeCLIModelEnvVar] = workflowData.EngineConfig.Model
 	}
 
+	applyEngineCwdEnv(env, workflowData)
 	if workflowData.EngineConfig != nil && len(workflowData.EngineConfig.Env) > 0 {
 		maps.Copy(env, workflowData.EngineConfig.Env)
 	}

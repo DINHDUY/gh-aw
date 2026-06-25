@@ -198,6 +198,62 @@ describe("process_runner.cjs", () => {
       expect(trailingXs.length).toBeLessThanOrEqual(200);
     });
 
+    it("spawns the child process in GITHUB_WORKSPACE when set", async () => {
+      const os = require("os");
+      const origWorkspace = process.env.GITHUB_WORKSPACE;
+      const tmpDir = os.tmpdir();
+      try {
+        process.env.GITHUB_WORKSPACE = tmpDir;
+        const logs = [];
+        const result = await runProcess({
+          command: process.execPath,
+          args: ["-e", "process.stdout.write(process.cwd()); process.exit(0)"],
+          attempt: 0,
+          log: msg => logs.push(msg),
+        });
+        // The child process cwd should match GITHUB_WORKSPACE (resolve symlinks for comparison)
+        const { realpathSync } = require("fs");
+        expect(realpathSync(result.output.trim())).toBe(realpathSync(tmpDir));
+      } finally {
+        if (origWorkspace === undefined) {
+          delete process.env.GITHUB_WORKSPACE;
+        } else {
+          process.env.GITHUB_WORKSPACE = origWorkspace;
+        }
+      }
+    });
+
+    it("GH_AW_ENGINE_CWD takes precedence over GITHUB_WORKSPACE as spawn cwd", async () => {
+      const os = require("os");
+      const origWorkspace = process.env.GITHUB_WORKSPACE;
+      const origEngineCwd = process.env.GH_AW_ENGINE_CWD;
+      const tmpDir = os.tmpdir();
+      try {
+        process.env.GITHUB_WORKSPACE = "/should-not-be-used";
+        process.env.GH_AW_ENGINE_CWD = tmpDir;
+        const logs = [];
+        const result = await runProcess({
+          command: process.execPath,
+          args: ["-e", "process.stdout.write(process.cwd()); process.exit(0)"],
+          attempt: 0,
+          log: msg => logs.push(msg),
+        });
+        const { realpathSync } = require("fs");
+        expect(realpathSync(result.output.trim())).toBe(realpathSync(tmpDir));
+      } finally {
+        if (origWorkspace === undefined) {
+          delete process.env.GITHUB_WORKSPACE;
+        } else {
+          process.env.GITHUB_WORKSPACE = origWorkspace;
+        }
+        if (origEngineCwd === undefined) {
+          delete process.env.GH_AW_ENGINE_CWD;
+        } else {
+          process.env.GH_AW_ENGINE_CWD = origEngineCwd;
+        }
+      }
+    });
+
     describe("copilot sdk env helpers", () => {
       it("detects copilot sdk mode from COPILOT_SDK_URI", () => {
         expect(isCopilotSDKEnabled({ COPILOT_SDK_URI: "http://127.0.0.1:3000" })).toBe(true);
