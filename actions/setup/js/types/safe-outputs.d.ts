@@ -434,6 +434,21 @@ interface ReplyToPullRequestReviewCommentItem extends BaseSafeOutputItem {
 }
 
 /**
+ * JSONL item for dismissing a pull request review
+ */
+interface DismissPullRequestReviewItem extends BaseSafeOutputItem {
+  type: "dismiss_pull_request_review";
+  /** Numeric review ID to dismiss */
+  review_id: number | string;
+  /** Dismissal justification (minimum 20 characters) */
+  justification: string;
+  /** Optional review author login, must match workflow actor */
+  author?: string;
+  /** Optional PR number (required when target is "*") */
+  pull_request_number?: number | string;
+}
+
+/**
  * JSONL item for creating a GitHub Project V2
  */
 interface CreateProjectItem extends BaseSafeOutputItem {
@@ -503,6 +518,7 @@ type SafeOutputItem =
   | LinkSubIssueItem
   | HideCommentItem
   | ReplyToPullRequestReviewCommentItem
+  | DismissPullRequestReviewItem
   | CreateProjectItem
   | AutofixCodeScanningAlertItem
   | ResolvePullRequestReviewThreadItem;
@@ -547,6 +563,7 @@ export {
   LinkSubIssueItem,
   HideCommentItem,
   ReplyToPullRequestReviewCommentItem,
+  DismissPullRequestReviewItem,
   AutofixCodeScanningAlertItem,
   ResolvePullRequestReviewThreadItem,
   SafeOutputItem,
